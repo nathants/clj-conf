@@ -51,14 +51,18 @@
       (spit extra-conf (str {:a :new-val}))
       (let [conf (sut/load extra-conf base-conf)]
         (is (= :new-val (conf :a)))))
-    (testing "left most value can be an edn-str"
+    (testing "the first value can be an edn-str"
       (spit base-conf (str {:a :default-val}))
       (spit extra-conf (str {:a :new-val}))
       (let [conf (sut/load "{:a :newest-val}" extra-conf base-conf)]
         (is (= :newest-val (conf :a)))))
-    (testing "extra confs on the left must be overriding values that are already defined in confs on the right"
+    (testing "extra confs must be overriding values already defined in the last (base) conf"
       (spit extra-conf (str {:unknown-key :not-gonna-work}))
       (is (thrown? AssertionError (sut/load extra-conf base-conf))))))
+
+(deftest load-just-empty-str
+  (let [conf (sut/load "")]
+    (is (thrown? AssertionError (conf :literally-anything)))))
 
 (deftest test-keys-in
   (is (= [[1 2]

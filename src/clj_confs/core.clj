@@ -1,5 +1,6 @@
 (ns clj-confs.core
   (:require [clojure.edn :as edn]
+            [clojure.pprint :as pprint]
             [clojure.java.io :as io]))
 
 (defn -keys-in
@@ -14,16 +15,34 @@
     (remove #(= % [::end]))
     (map reverse)))
 
+(defn -validate-conf-overrides
+  [paths confs]
+  (or (= 0 (count paths)) ;; no confs
+      (= 1 (count paths)) ;; one conf, so no overrides to check
+      (let [conf (apply -load (drop 1 paths))]
+        (->> confs
+          first
+          -keys-in
+          (mapv #(try
+                   (apply conf %)
+                   (catch AssertionError _
+                     (throw
+                      (AssertionError.
+                       (str "get-in " (vec %) " is an override which "
+                            "is not defined in the base conf. "
+                            "overriding conf:\n"
+                            (with-out-str (pprint/pprint (first confs)))
+                            "base conf:\n"
+                            (with-out-str (pprint/pprint (last confs)))))))))))))
+
 (defn -load
   [& paths]
   (let [confs (mapv #(edn/read-string (slurp %)) paths)]
-    (or (= 1 (count paths))
-        (let [conf (apply -load (drop 1 paths))]
-          (mapv #(apply conf %) (-keys-in (first confs)))))
+    (-validate-conf-overrides paths confs)
     (with-meta
       (fn [& ks]
         (doto (->> confs (map #(get-in % ks)) (remove nil?) first)
-          (-> nil? not (assert (str "there is no value for keys " (vec ks) " in paths " (vec paths))))))
+          (-> nil? not (assert (str "there is no value for get-in " (vec ks) " in paths " (vec paths))))))
       {:confs confs})))
 
 (defn load
@@ -31,11 +50,11 @@
   (let [paths (if (empty? paths)
                 ["{}"]
                 paths)
-        last-is-str (->> paths first io/as-file .exists not)
-        edn-str (if last-is-str
+        first-is-str (->> paths first io/as-file .exists not)
+        edn-str (if first-is-str
                   (first paths)
                   "")
-        paths (if last-is-str
+        paths (if first-is-str
                 (rest paths)
                 paths)]
     (if-not (edn/read-string edn-str)

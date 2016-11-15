@@ -1,4 +1,4 @@
-(ns clj-confs.core
+(ns confs.core
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pprint]
             [clojure.java.io :as io]))
@@ -14,6 +14,9 @@
     (partition-by #(= % ::end))
     (remove #(= % [::end]))
     (map reverse)))
+
+(def -load)
+(def -validate-conf-overrides)
 
 (defn -validate-conf-overrides
   [paths confs]

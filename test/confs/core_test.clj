@@ -1,6 +1,6 @@
-(ns clj-confs.core-test
+(ns confs.core-test
   (:require [clojure.test :refer :all]
-            [clj-confs.core :as sut]))
+            [confs.core :as sut]))
 
 (defn temp-path
   []

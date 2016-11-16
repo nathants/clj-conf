@@ -60,8 +60,12 @@
   (let [paths (if (empty? paths) ["{}"] paths)
         first-is-edn-str (not (.exists (io/as-file (first paths))))
         paths (if first-is-edn-str
-                (let [path (.getAbsolutePath (java.io.File/createTempFile "temp" ""))]
-                  (spit path (pr-str (or (edn/read-string (first paths)) {})))
+                (let [path (.getAbsolutePath (java.io.File/createTempFile "temp" ""))
+                      val (try
+                            (edn/read-string (first paths))
+                            (catch Throwable ex
+                              (throw (AssertionError. (str "failed to edn/read-string " (first paths))))))]
+                  (spit path (pr-str (or val {})))
                   (cons path (rest paths)))
                 paths)
         confs (mapv #(edn/read-string (slurp %)) paths)]

@@ -1,7 +1,25 @@
 (ns confs.core
   (:require [clojure.edn :as edn]
             [clojure.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.java.io :as io]))
+
+(def *conf* nil)
+(def *paths* nil)
+
+(defmacro conf
+  [& ks]
+  `(doto (-> *conf* ~@ks)
+     (-> nil? not (assert (str "there is no value for get-in " ~(vec ks) " in paths " (vec *paths*))))))
+
+(defn -deep-merge
+  "maps later in list override maps earlier in list, like clojure.core/merge"
+  [& maps]
+  (into {} (for [k (apply set/union (map set (map keys maps)))]
+             (let [vs (remove nil? (map #(get % k) maps))]
+               [k (if (map? (last vs))
+                    (apply -deep-merge vs)
+                    (last vs))]))))
 
 (defn -keys-in
   [m]
@@ -15,53 +33,39 @@
     (remove #(= % [::end]))
     (map reverse)))
 
-(def -load)
-(def -validate-conf-overrides)
+(defn -validate
+  "makes sure all (butlast confs) contain only subsets of keys
+  in (last confs), where keys are seqs of keys like the arg to
+  get-in."
+  [confs]
+  (or (= 0 (count confs)) ;; no confs
+      (= 1 (count confs)) ;; one conf, so no overrides to check
+      (let [confs-to-validate (butlast confs)
+            base (last confs)]
+        (doseq [conf confs-to-validate]
+          (assert (set/subset? (set (-keys-in conf))
+                               (set (-keys-in base)))
+                  (str "get-in " (vec (-keys-in conf))
+                       " is an override which is not "
+                       "defined in the base conf. overriding conf:\n"
+                       (with-out-str (pprint/pprint (first confs)))
+                       "base conf:\n"
+                       (with-out-str (pprint/pprint (last confs)))))))))
 
-(defn -validate-conf-overrides
-  [paths confs]
-  (or (= 0 (count paths)) ;; no confs
-      (= 1 (count paths)) ;; one conf, so no overrides to check
-      (let [conf (apply -load (drop 1 paths))]
-        (->> confs
-          first
-          -keys-in
-          (mapv #(try
-                   (apply conf %)
-                   (catch AssertionError _
-                     (throw
-                      (AssertionError.
-                       (str "get-in " (vec %) " is an override which "
-                            "is not defined in the base conf. "
-                            "overriding conf:\n"
-                            (with-out-str (pprint/pprint (first confs)))
-                            "base conf:\n"
-                            (with-out-str (pprint/pprint (last confs)))))))))))))
-
-(defn -load
+(defn reset!
+  "paths earlier in list override paths later in list. last path in
+  list defines all possible keys and default values, and overrides
+  must only use defined keys."
   [& paths]
-  (let [confs (mapv #(edn/read-string (slurp %)) paths)]
-    (-validate-conf-overrides paths confs)
-    (with-meta
-      (fn [& ks]
-        (doto (->> confs (map #(get-in % ks)) (remove nil?) first)
-          (-> nil? not (assert (str "there is no value for get-in " (vec ks) " in paths " (vec paths))))))
-      {:confs confs})))
-
-(defn load
-  [& paths]
-  (let [paths (if (empty? paths)
-                ["{}"]
+  (let [paths (if (empty? paths) ["{}"] paths)
+        first-is-edn-str (not (.exists (io/as-file (first paths))))
+        paths (if first-is-edn-str
+                (let [path (.getAbsolutePath (java.io.File/createTempFile "temp" ""))]
+                  (spit path (pr-str (or (edn/read-string (first paths)) {})))
+                  (cons path (rest paths)))
                 paths)
-        first-is-str (->> paths first io/as-file .exists not)
-        edn-str (if first-is-str
-                  (first paths)
-                  "")
-        paths (if first-is-str
-                (rest paths)
-                paths)]
-    (if-not (edn/read-string edn-str)
-      (apply -load paths)
-      (let [path (.getAbsolutePath (java.io.File/createTempFile "temp" ""))]
-        (spit path edn-str)
-        (apply -load (cons path paths))))))
+        confs (mapv #(edn/read-string (slurp %)) paths)]
+    (-validate confs)
+    (def *conf* (apply -deep-merge (reverse confs)))
+    (def *paths* paths)
+    nil))

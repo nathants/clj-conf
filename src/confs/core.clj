@@ -57,8 +57,7 @@
   list defines all possible keys and default values, and overrides
   must only use defined keys."
   [& paths]
-  (let [paths (if (empty? paths) ["{}"] paths)
-        first-is-edn-str (not (.exists (io/as-file (first paths))))
+  (let [first-is-edn-str (re-find #"^ *\{" (first paths))
         paths (if first-is-edn-str
                 (let [path (.getAbsolutePath (java.io.File/createTempFile "temp" ""))
                       val (try
@@ -68,7 +67,8 @@
                   (spit path (pr-str (or val {})))
                   (cons path (rest paths)))
                 paths)
-        confs (mapv #(edn/read-string (slurp %)) paths)]
+        confs (mapv #(edn/read-string (slurp (or (io/resource %) %)))
+                    paths)]
     (-validate confs)
     (def *conf* (apply -deep-merge (reverse confs)))
     (def *paths* paths)

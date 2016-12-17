@@ -37,10 +37,6 @@
             {:a {:b {:c :d}}}
             {:a {:b {:c :e}}})))))
 
-(deftest load-confs-with-nothing
-  (sut/reset!)
-  (is (thrown? AssertionError (sut/conf :no-keys-in-empty-conf))))
-
 (deftest test-load-confs
   (let [path (temp-path)
         data {:a "foo"
@@ -67,10 +63,7 @@
     (spit path (str data))
     (testing "overriding a value from an edn string"
       (sut/reset! "{:a :new-val}" path)
-      (is (= :new-val (sut/conf :a))))
-    (testing "edn strings which read to nil are ignored"
-      (sut/reset! "   " path)
-      (is (= :default-val (sut/conf :a))))))
+      (is (= :new-val (sut/conf :a))))))
 
 (deftest test-load-confs-multiple-paths
   (let [extra-conf (temp-path)
@@ -89,6 +82,17 @@
       (spit extra-conf (str {:unknown-key :not-gonna-work}))
       (is (thrown? AssertionError (sut/reset! extra-conf base-conf))))))
 
+(deftest test-load-resource-confs
+  (testing "overriding a resource config"
+    (sut/reset! "resource-config.edn")
+    (is (= :bar (sut/conf :foo))))
+  (let [path (temp-path)
+        data {:foo :baz}]
+    (spit path (str data))
+    (testing "overriding a resource config with a path config"
+      (sut/reset! path "resource-config.edn")
+      (is (= :baz (sut/conf :foo))))))
+
 (deftest test-deeply-nested-configs
   (let [base-conf (temp-path)
         conf1 (temp-path)
@@ -102,10 +106,6 @@
     (sut/reset! (pr-str {:foo :baz}) conf1 base-conf)
     (is (= :baz (sut/conf :foo)))
     (is (= :e (sut/conf :a :b :c)))))
-
-(deftest load-just-empty-str
-  (sut/reset! "")
-  (is (thrown? AssertionError (sut/conf :literally-anything))))
 
 (deftest test-keys-in
   (is (= [[1 2]

@@ -4,8 +4,8 @@
             [clojure.set :as set]
             [clojure.java.io :as io]))
 
-(def *conf* nil)
-(def *paths* nil)
+(def ^:dynamic *conf* nil)
+(def ^:dynamic *paths* nil)
 
 (defmacro conf
   [& ks]
@@ -70,6 +70,6 @@
         confs (mapv #(edn/read-string (slurp (or (io/resource %) %)))
                     paths)]
     (-validate confs)
-    (def *conf* (apply -deep-merge (reverse confs)))
-    (def *paths* paths)
+    (def ^:dynamic *conf* (apply -deep-merge (reverse confs)))
+    (def ^:dynamic *paths* paths)
     nil))
